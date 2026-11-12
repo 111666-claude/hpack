@@ -113,6 +113,31 @@ class HeaderTable:
         self.resized = False
         self.dynamic_entries: deque[tuple[bytes, bytes]] = deque()
 
+    def snapshot(self) -> tuple[int, int, bool, deque[tuple[bytes, bytes]]]:
+        """
+        Capture the full mutable state of the table so that it can be restored
+        later via :meth:`restore`.
+
+        The deque holding the dynamic entries is copied, so mutations made
+        after the snapshot do not affect the captured state.
+        """
+        return (
+            self._maxsize,
+            self._current_size,
+            self.resized,
+            self.dynamic_entries.copy(),
+        )
+
+    def restore(
+        self,
+        state: tuple[int, int, bool, deque[tuple[bytes, bytes]]],
+    ) -> None:
+        """
+        Restore the table to a state previously captured by
+        :meth:`snapshot`, discarding every change made in the meantime.
+        """
+        self._maxsize, self._current_size, self.resized, self.dynamic_entries = state
+
     def get_by_index(self, index: int) -> tuple[bytes, bytes]:
         """
         Returns the entry specified by index

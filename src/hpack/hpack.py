@@ -493,6 +493,38 @@ class Decoder:
         """
         log.debug("Decoding %s", data)
 
+        # Snapshot the compression context before touching it. A malformed
+        # header block must not leave the dynamic table (or its size) in a
+        # partially updated state, so on any error we restore the snapshot and
+        # the decoder remains usable with the context it had before this call.
+        table_state = self.header_table.snapshot()
+
+        try:
+            headers = self._decode_header_block(data)
+        except BaseException:
+            # Roll back every context change (dynamic entries and table size)
+            # performed while decoding the rejected header block.
+            self.header_table.restore(table_state)
+            raise
+
+        try:
+            return [_unicode_if_needed(h, raw) for h in headers]
+        except UnicodeDecodeError as err:
+            # The block itself was valid, but the caller asked for a Unicode
+            # representation that the byte strings do not support. This is not
+            # an HPACK-level failure and must not alter the compression
+            # context, so no rollback is performed here.
+            msg = "Unable to decode headers as UTF-8"
+            raise HPACKDecodingError(msg) from err
+
+    def _decode_header_block(self, data: bytes) -> list[HeaderTuple]:
+        """
+        Walks a complete HPACK header block and returns the decoded headers.
+
+        Every mutation of the header table performed here is provisional: the
+        caller is responsible for snapshotting the table beforehand and
+        restoring that snapshot if this method raises.
+        """
         data_mem = memoryview(data)
         headers: list[HeaderTuple] = []
         data_len = len(data)
@@ -553,11 +585,7 @@ class Decoder:
         # remote peer hasn't actually done that.
         self._assert_valid_table_size()
 
-        try:
-            return [_unicode_if_needed(h, raw) for h in headers]
-        except UnicodeDecodeError as err:
-            msg = "Unable to decode headers as UTF-8"
-            raise HPACKDecodingError(msg) from err
+        return headers
 
     def _assert_valid_table_size(self) -> None:
         """

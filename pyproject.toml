@@ -122,6 +122,18 @@ lint.ignore = [
 ]
 lint.isort.required-imports = [ "from __future__ import annotations" ]
 
+# The decoder hardening suite is written against the standard-library
+# ``unittest`` API (it also runs under the ``unittest`` runner), so the
+# pytest-specific rules and a couple of unittest idioms do not apply to it.
+[tool.ruff.lint.per-file-ignores]
+"tests/test_hpack_decoder_hardening.py" = [
+  "INP001",  # the file has a unittest.main() entry point
+  "PT009",   # unittest assertEqual/assertRaises are the intended API
+  "PT027",   # unittest uses assertRaises, not pytest.raises
+  "SIM117",  # nested with-blocks read more clearly here
+  "SLF001",  # tests legitimately inspect private table accounting
+]
+
 [tool.pytest]
 testpaths = [ "tests" ]
 
